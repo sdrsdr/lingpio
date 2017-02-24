@@ -23,6 +23,10 @@ Copyright 2017 Stoian Ivanov <sdr@mail.bg>
 
 #include "lingpio.h"
 
+#define GPIO_BOARD_DEFINE_NOW
+#include "board.h"
+#undef GPIO_BOARD_DEFINE_NOW
+
 #include <stdbool.h>
 
 #include <fcntl.h>
@@ -35,6 +39,15 @@ Copyright 2017 Stoian Ivanov <sdr@mail.bg>
 
 #include <string.h>
 #include <poll.h>
+
+static const pindescr_t *current_info=gpio_pins_info;
+const pindescr_t *gpio_get_board_info(int *apiversion){
+	if (apiversion) *apiversion=LINGPIO_API_VERSION;
+	return current_info;
+}
+void gpio_set_board_info(const pindescr_t *info){
+	current_info=info;
+}
 
 bool gpio_export(pindescr_t *pind) {
 	char buf[255];
@@ -155,16 +168,13 @@ int gpio_wait_edge(pindh_t *pinh,int tmo_milliseconds){
 	fdset[0].fd = pinh->value_fd;
 	fdset[0].events = POLLPRI;
 
-	int rc = poll(fdset, 1, tmo_milliseconds);      
+	int rc = poll(fdset, 1, tmo_milliseconds);
 
 	if (rc < 0) return GPIO_WAIT_ERR;
 	
 	
-	if (rc == 0) return GPIO_WAIT_TMO
+	if (rc == 0) return GPIO_WAIT_TMO;
 
-	if (fdset[0].revents & POLLPRI) {
-		lseek(fdset[1].fd, 0, SEEK_SET);
-		len = read(fdset[1].fd, buf, MAX_BUF);
-		printf("\npoll() GPIO %d interrupt occurred\n", gpio);
-	}
+	if (fdset[0].revents & POLLPRI) return GPIO_WAIT_EDGE;
+	return GPIO_WAIT_ERR;
 }

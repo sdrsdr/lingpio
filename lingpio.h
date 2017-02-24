@@ -18,11 +18,17 @@ Copyright 2017 Stoian Ivanov <sdr@mail.bg>
 	along with lingpio library.  If not, see <http://www.gnu.org/licenses/>.
 
 */
+#ifndef LINGPIO_H
+#define LINGPIO_H
+
 #include <stdbool.h>
 #include <unistd.h>
 
-#ifndef LINGPIO_H
-#define LINGPIO_H
+
+
+//check this against the api version obtained by gpio_get_board_info
+#define LINGPIO_API_VERSION 1
+
 typedef struct{
 	//user part
 	const char *pinname;
@@ -111,6 +117,7 @@ bool gpio_set_by_sysfspinnum(int sysfspinnum,int state){
 	return 	gpio_set(&pinh,state);
 }
 
-
+const pindescr_t *gpio_get_board_info(int *apiversion);
+void gpio_set_board_info(const pindescr_t *info);
 
 #endif

@@ -22,12 +22,23 @@ based on https://github.com/xtacocorex/CHIP_IO/blob/master/source/common.c
 */
 #ifndef LINGPIO_BOARD_CHIP_H
 #define LINGPIO_BOARD_CHIP_H
+
+#include "board.h"
+
+#if GPIO_BOARD() == BOARD_CHIP
+#define DECLARENAME gpio_pins_info
+#else 
+#define DECLARENAME chip_pins_info
+#endif
+
 #include "lingpio.h"
-#ifdef GPIO_BOARD_DECLARE_ONLY
-extern pindescr_t chip_pins_info[];
+#ifndef GPIO_BOARD_DEFINE_NOW
+extern pindescr_t DECLARENAME[];
 #else
 #include <stdlib.h>
-pindescr_t chip_pins_info[] = {
+pindescr_t DECLARENAME[] = {
+//  pin         chip     chip     sysfs
+//  nane       pin num   label    pin num
   { "TWI1-SDA",    48, "default" , 48},
   { "TWI1-SCK",    47, "default" , 47},
   { "LCD-D2",      98, "default" , 98},
