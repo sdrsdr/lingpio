@@ -118,6 +118,9 @@ bool gpio_set_by_sysfspinnum(int sysfspinnum,int state){
 	return 	gpio_set(&pinh,state);
 }
 
+bool gpio_set_edgedetect(pindescr_t *pind,int edgedetect);
+int gpio_wait_edge(pinh_t *pinh,int tmo_milliseconds);
+
 pindescr_t *gpio_get_board_info(int *apiversion);
 void gpio_set_board_info(pindescr_t *info);
 
