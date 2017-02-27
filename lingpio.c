@@ -19,7 +19,8 @@ Copyright 2017 Stoian Ivanov <sdr@mail.bg>
 
 */
 
-#define  _POSIX_C_SOURCE  200809L
+#define _POSIX_C_SOURCE  200809L
+#define _GNU_SOURCE 
 
 #include "lingpio.h"
 
@@ -177,4 +178,15 @@ int gpio_wait_edge(pindh_t *pinh,int tmo_milliseconds){
 
 	if (fdset[0].revents & POLLPRI) return GPIO_WAIT_EDGE;
 	return GPIO_WAIT_ERR;
+}
+
+const pindescr_t *gpio_get_pind(const char *pinname){
+	const pindescr_t *cpin=current_info;
+	while (cpin->pinname!=NULL) {
+		if (strcasecmp(pinname,cpin->pinname)==0){
+			return cpin;
+		}
+		cpin++;
+	}
+	return NULL;
 }
