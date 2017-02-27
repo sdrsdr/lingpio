@@ -40,31 +40,49 @@ Copyright 2017 Stoian Ivanov <sdr@mail.bg>
 
 #include <string.h>
 #include <poll.h>
+#include <dirent.h> 
 
-static const pindescr_t *current_info=gpio_pins_info;
-const pindescr_t *gpio_get_board_info(int *apiversion){
+static pindescr_t *current_info=gpio_pins_info;
+pindescr_t *gpio_get_board_info(int *apiversion){
 	if (apiversion) *apiversion=LINGPIO_API_VERSION;
 	return current_info;
 }
-void gpio_set_board_info(const pindescr_t *info){
+void gpio_set_board_info(pindescr_t *info){
 	current_info=info;
 }
 
 bool gpio_export(pindescr_t *pind) {
 	char buf[255];
+	
+    snprintf(buf,255, "/sys/class/gpio/gpio%d", pind->sysfspinnum);
+	struct stat st;
+	if (stat(buf, &st)==0 && S_ISDIR(st.st_mode)) {
+		return true;
+	}
+
+	
+	
+	
 	int fd = open("/sys/class/gpio/export", O_WRONLY);
-	if (fd==-1) return false;
+	if (fd==-1) {
+		return false;
+	}
 	int sz=snprintf(buf,255, "%d", pind->sysfspinnum); 
 	if (write(fd, buf, sz)!=sz) {
 		close(fd);
+		//check if priorly exported:
+		snprintf(buf,255, "/sys/class/gpio/gpio%d", pind->sysfspinnum);
+		if (stat(buf, &st)==0 && S_ISDIR(st.st_mode)) {
+			return true;
+		}
 		return false;
 	};
 	close(fd);
     snprintf(buf,255, "/sys/class/gpio/gpio%d", pind->sysfspinnum);
-	struct stat st;
-	if (stat(buf, &st)==-1) return false;
-	if (!S_ISDIR(st.st_mode)) return false;
-	return true;
+	if (stat(buf, &st)==0 && S_ISDIR(st.st_mode)) {
+		return true;
+	}
+	return false;
 }
 
 bool gpio_unexport(pindescr_t *pind) {
@@ -87,37 +105,43 @@ bool gpio_unexport(pindescr_t *pind) {
 bool gpio_set_direction(pindescr_t *pind, int direction) {
 	char buf[255];
     snprintf(buf,255, "/sys/class/gpio/gpio%d/direction", pind->sysfspinnum);
-    int fd = open(buf, O_WRONLY);
-	if (fd==-1) return false;
-	
+    int fd = open(buf, O_RDWR);
+	if (fd==-1) {
+		return false;
+	}
     if (direction==GPIO_DIR_OUT) {
         if (write(fd, "out", 3)!=3) goto fail;
-		if (read(fd, buf,5)<3) goto fail;
+		if (pread(fd, buf,5,0)<3) goto fail;
 		if (buf[0]!='o' || buf[1]!='u' || buf[2]!='t') goto fail;
     } else {
         if (write(fd, "in", 2)!=2) goto fail;
-		if (read(fd, buf,5)<2) goto fail;
+		if (pread(fd, buf,5,0)<2) goto fail;
 		if (buf[0]!='i' || buf[1]!='n' ) goto fail;
     }
     close(fd);
 	return true;
 fail:
-    close(fd);
+	close(fd);
 	return false;
 }
 
 
-bool gpio_prepio(pindescr_t *pind, int direction,pindh_t *pinh){
+bool gpio_prepio(pindescr_t *pind, int direction,pinh_t *pinh){
+	pinh->descr=pind;
 	if (!gpio_export(pind)) return false;
 	if (!gpio_set_direction(pind,direction)) return false;
 	char buf[255];
     snprintf(buf,255, "/sys/class/gpio/gpio%d/value", pind->sysfspinnum);
-    pinh->value_fd = open(buf, O_RDWR|O_NONBLOCK);
+	if (direction==GPIO_DIR_IN) {
+		pinh->value_fd = open(buf, O_RDONLY|O_NONBLOCK);
+	} else {
+		pinh->value_fd = open(buf, O_WRONLY|O_NONBLOCK);
+	}
 	if (pinh->value_fd==-1) return false;
 	return true;
 }
 
-int gpio_get(pindh_t *pinh){
+int gpio_get(pinh_t *pinh){
 	char value;
 
 	if (pread(pinh->value_fd, &value, 1,0)!=1) return GPIO_STATE_ERR;
@@ -126,7 +150,7 @@ int gpio_get(pindh_t *pinh){
 	return GPIO_STATE_HI;
 }
 
-bool gpio_set(pindh_t *pinh,int state){
+bool gpio_set(pinh_t *pinh,int state){
 	char value;
 	if (state==GPIO_STATE_HI) value='1';
 	else if (state==GPIO_STATE_LO) value='0';
@@ -160,7 +184,7 @@ bool gpio_set_edgedetect(pindescr_t *pind,int edgedetect){
 	return true;
 }
 
-int gpio_wait_edge(pindh_t *pinh,int tmo_milliseconds){
+int gpio_wait_edge(pinh_t *pinh,int tmo_milliseconds){
 	struct pollfd fdset[1];
 	
 	memset((void*)fdset, 0, sizeof(fdset));
@@ -180,13 +204,77 @@ int gpio_wait_edge(pindh_t *pinh,int tmo_milliseconds){
 	return GPIO_WAIT_ERR;
 }
 
-const pindescr_t *gpio_get_pind(const char *pinname){
-	const pindescr_t *cpin=current_info;
+pindescr_t *gpio_get_pind(const char *pinname){
+	pindescr_t *cpin=current_info;
 	while (cpin->pinname!=NULL) {
 		if (strcasecmp(pinname,cpin->pinname)==0){
-			return cpin;
+			if (cpin->sysfspinnum>=0) {
+				return cpin;
+			}
+			if (cpin->chipname==NULL) return false;
+			DIR *dir=opendir("/sys/class/gpio/");
+			if (dir==NULL) {
+				return NULL;
+			}
+			struct dirent *de;
+			while ((de=readdir(dir))!=NULL){
+				int l=strlen(de->d_name);
+				if (l<9) continue;
+				if (memcmp("gpiochip",de->d_name,8)==0) {
+					char buf[255];
+					snprintf(buf,255, "/sys/class/gpio/%s/label", de->d_name);
+					int fh=open(buf,O_RDONLY);
+					if (fh==-1){
+						continue;
+					};
+					int sz=read(fh,buf,254);
+					if (sz<=0) {
+						close(fh); 
+						continue;
+					}
+					buf[sz]=0;
+					if (sz>0 && (buf[sz-1]=='\r' || buf[sz-1]=='\n')) {
+						buf[sz-1]=0; sz--;
+					}
+					if (sz>0 && (buf[sz-1]=='\r' || buf[sz-1]=='\n')) {
+						buf[sz-1]=0; sz--;
+					}
+					close(fh); 
+					if (strcmp(buf,cpin->chipname)==0) {
+						snprintf(buf,255, "/sys/class/gpio/%s/base", de->d_name);
+						fh=open(buf,O_RDONLY);
+						if (fh==-1){
+							break;
+						};
+						sz=read(fh,buf,254);
+						if (sz<=0) {
+							close(fh); 
+							break;
+						}
+						buf[sz]=0;
+						if (sz>0 && (buf[sz-1]=='\r' || buf[sz-1]=='\n')) {
+							buf[sz-1]=0; sz--;
+						}
+						if (sz>0 && (buf[sz-1]=='\r' || buf[sz-1]=='\n')) {
+							buf[sz-1]=0; sz--;
+						}
+						int basei=atoi(buf);
+						cpin->sysfspinnum=basei+cpin->pinnum;
+						close(fh); closedir(dir);
+						pindescr_t *xpin=current_info;
+						while (xpin->pinname!=NULL) {
+							if (strcasecmp(xpin->chipname,cpin->chipname)==0 &&xpin->sysfspinnum<0) xpin->sysfspinnum=basei+xpin->pinnum;
+							xpin++;
+						}
+						return cpin;
+					}
+				}
+			}
+			closedir(dir);
+			return NULL;
 		}
 		cpin++;
+		
 	}
 	return NULL;
 }

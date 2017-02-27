@@ -33,16 +33,16 @@ typedef struct{
 	//user part
 	const char *pinname;
 	unsigned pinnum;
-	const char *cipname;
+	const char *chipname;
 	//sysfs part
-	unsigned sysfspinnum;
+	int sysfspinnum;
 	const char *pindir;
 } pindescr_t;
 
 typedef struct {
 	pindescr_t *descr;
 	int value_fd;
-} pindh_t;
+} pinh_t;
 
 
 #define GPIO_DIR_IN 1
@@ -81,43 +81,45 @@ bool gpio_set_direction_by_sysfspinnum(int sysfspinnum, int direction){
 	return 	gpio_set_direction(&pind,direction);
 }
 
-bool gpio_prepio(pindescr_t *pind, int direction,pindh_t *pinh);
+bool gpio_prepio(pindescr_t *pind, int direction,pinh_t *pinh);
 
 static inline
-bool gpio_prepio_by_sysfspinnum(int sysfspinnum, int direction, pindh_t *pinh){
+bool gpio_prepio_by_sysfspinnum(int sysfspinnum, int direction, pinh_t *pinh){
 	pindescr_t pind; pind.sysfspinnum=sysfspinnum;
 	return 	gpio_prepio(&pind,direction,pinh);
 }
 
 static inline
-void gpio_unprepio(pindh_t *pinh){
+void gpio_unprepio(pinh_t *pinh){
+	if (pinh->descr) gpio_unexport(pinh->descr);
 	close(pinh->value_fd);
 }
 
-int gpio_get(pindh_t *pinh);
+int gpio_get(pinh_t *pinh);
 
 //this is VERY unefficient! better do gpio_prepio_by_sysfspinnum and keep  the pinh arouind for proper gpio_get
 static inline
 int gpio_get_by_sysfspinnum(int sysfspinnum){
 	pindescr_t pind; pind.sysfspinnum=sysfspinnum;
-	pindh_t pinh;
+	   pinh_t pinh;
 	gpio_prepio(&pind, GPIO_DIR_IN, &pinh);
 	return 	gpio_get(&pinh);
 	
 }
 
-bool gpio_set(pindh_t *pinh,int state);
+bool gpio_set(pinh_t *pinh,int state);
 
 //this is VERY unefficient! better do gpio_prepio_by_sysfspinnum and keep  the pinh arouind for proper gpio_set
 static inline
 bool gpio_set_by_sysfspinnum(int sysfspinnum,int state){
 	pindescr_t pind; pind.sysfspinnum=sysfspinnum;
-	pindh_t pinh;
+	   pinh_t pinh;
 	gpio_prepio(&pind, GPIO_DIR_OUT, &pinh);
 	return 	gpio_set(&pinh,state);
 }
 
-const pindescr_t *gpio_get_board_info(int *apiversion);
-void gpio_set_board_info(const pindescr_t *info);
+pindescr_t *gpio_get_board_info(int *apiversion);
+void gpio_set_board_info(pindescr_t *info);
 
+pindescr_t *gpio_get_pind(const char *pinname);
 #endif
