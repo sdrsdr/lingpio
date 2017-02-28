@@ -96,6 +96,14 @@ void gpio_unprepio(pinh_t *pinh){
 }
 
 int gpio_get(pinh_t *pinh);
+static inline
+const char *gpio_get_s(pinh_t *pinh) {
+	int st=gpio_get(pinh);
+	if (st==GPIO_STATE_HI) return "HI";
+	if (st==GPIO_STATE_LO) return "LO";
+	if (st==GPIO_STATE_ERR) return "ERR";
+	return "???";
+}
 
 //this is VERY unefficient! better do gpio_prepio_by_sysfspinnum and keep  the pinh arouind for proper gpio_get
 static inline
@@ -125,4 +133,12 @@ pindescr_t *gpio_get_board_info(int *apiversion);
 void gpio_set_board_info(pindescr_t *info);
 
 pindescr_t *gpio_get_pind(const char *pinname);
+
+
+//bot this return number of units remaining if interrupted
+int gpio_millisleep (unsigned millis);
+int gpio_microsleep (unsigned micros);
+
 #endif
+
+

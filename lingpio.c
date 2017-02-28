@@ -41,6 +41,7 @@ Copyright 2017 Stoian Ivanov <sdr@mail.bg>
 #include <string.h>
 #include <poll.h>
 #include <dirent.h> 
+#include <time.h>
 
 static pindescr_t *current_info=gpio_pins_info;
 pindescr_t *gpio_get_board_info(int *apiversion){
@@ -129,7 +130,10 @@ fail:
 bool gpio_prepio(pindescr_t *pind, int direction,pinh_t *pinh){
 	pinh->descr=pind;
 	if (!gpio_export(pind)) return false;
-	if (!gpio_set_direction(pind,direction)) return false;
+	if (!gpio_set_direction(pind,direction)) {
+		gpio_unexport(pind);
+		return false;
+	}
 	char buf[255];
     snprintf(buf,255, "/sys/class/gpio/gpio%d/value", pind->sysfspinnum);
 	if (direction==GPIO_DIR_IN) {
@@ -137,7 +141,10 @@ bool gpio_prepio(pindescr_t *pind, int direction,pinh_t *pinh){
 	} else {
 		pinh->value_fd = open(buf, O_WRONLY|O_NONBLOCK);
 	}
-	if (pinh->value_fd==-1) return false;
+	if (pinh->value_fd==-1) {
+		gpio_unexport(pind);
+		return false;
+	}
 	return true;
 }
 
@@ -277,4 +284,41 @@ pindescr_t *gpio_get_pind(const char *pinname){
 		
 	}
 	return NULL;
+}
+
+
+int gpio_microsleep (unsigned micros) {
+   struct timespec req, rem;
+
+   if(micros > 999999)
+   {   
+        req.tv_sec = (int)(micros / 1000000);                            /* Must be Non-Negative */
+        req.tv_nsec = (micros - ((long)req.tv_sec * 1000000)) * 1000; /* Must be in range of 0 to 999999999 */
+   }   
+   else
+   {   
+        req.tv_sec = 0;                         /* Must be Non-Negative */
+        req.tv_nsec = micros * 1000;    /* Must be in range of 0 to 999999999 */
+   }   
+
+   if (nanosleep(&req , &rem)==0) return 0;
+   else return rem.tv_sec*1000000+rem.tv_nsec/1000;
+}
+
+int gpio_millisleep (unsigned millis) {
+   struct timespec req, rem;
+
+   if(millis > 999)
+   {   
+        req.tv_sec = (int)(millis / 1000);                            /* Must be Non-Negative */
+        req.tv_nsec = (millis - ((long)req.tv_sec * 1000)) * 1000000; /* Must be in range of 0 to 999999999 */
+   }   
+   else
+   {   
+        req.tv_sec = 0;                         /* Must be Non-Negative */
+        req.tv_nsec = millis * 1000000;    /* Must be in range of 0 to 999999999 */
+   }   
+
+   if (nanosleep(&req , &rem)==0) return 0;
+   else return rem.tv_sec*1000+rem.tv_nsec/1000000;
 }
