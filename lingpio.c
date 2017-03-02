@@ -191,7 +191,7 @@ bool gpio_set_edgedetect(pindescr_t *pind,int edgedetect){
 	return true;
 }
 
-int gpio_wait_edge(pinh_t *pinh,int tmo_milliseconds){
+int gpio_wait_edge(pinh_t *pinh,int tmo_milliseconds,int *newpinstate){
 	struct pollfd fdset[1];
 	
 	memset((void*)fdset, 0, sizeof(fdset));
@@ -207,7 +207,10 @@ int gpio_wait_edge(pinh_t *pinh,int tmo_milliseconds){
 	
 	if (rc == 0) return GPIO_WAIT_TMO;
 
-	if (fdset[0].revents & POLLPRI) return GPIO_WAIT_EDGE;
+	if (fdset[0].revents & POLLPRI) {
+		if (newpinstate) *newpinstate=gpio_get(pinh);
+		return GPIO_WAIT_EDGE;
+	}
 	return GPIO_WAIT_ERR;
 }
 
